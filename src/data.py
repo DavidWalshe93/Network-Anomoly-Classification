@@ -63,7 +63,7 @@ class LabelManager:
         return [item.get("name") for item in self.info.get(key) if item.get("dtype") == dtype]
 
     @property
-    def X_discreet(self):
+    def X_discrete(self):
         return self.get_variable_on_dtype(key="X", dtype="discrete")
 
     @property
@@ -88,7 +88,6 @@ class DataRetriever:
 
         self._y = pd.DataFrame(data=dataset1.iloc[:, -1].values.reshape(-1, 1), columns=self.label_manager.y_column_name)
 
-
     def X_y_dataset(self, remove_duplicates=False, full_dataset=True) -> np.array:
         """
         Helper function to create the dataset, including the dependant "target" variable.
@@ -97,6 +96,7 @@ class DataRetriever:
         """
         # Lazy init
         if self._X is None or self._y is None:
+
             print(f"Only 10% of Dataset: {(not full_dataset)}")
             data, target = fetch_kddcup99(return_X_y=True, percent10=(not full_dataset))
 
