@@ -54,11 +54,11 @@
         },
         {
             "name": "root_shell",
-            "dtype": "continuous"
+            "dtype": "discrete"
         },
         {
             "name": "su_attempted",
-            "dtype": "continuous"
+            "dtype": "discrete"
         },
         {
             "name": "num_root",
