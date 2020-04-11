@@ -37,6 +37,7 @@ class PipelineLabelEncoder(TransformerMixin):
     Default LabelEncoder only accepts one dataset by default and is not
     suitable for Pipeline usage.
     """
+
     def __init__(self):
         """
         Class Constructor
@@ -63,6 +64,10 @@ class PipelineLabelEncoder(TransformerMixin):
         :return: A numpy ndarray of the applied transformation.
         """
         return self.encoder.transform(X).reshape(-1, 1)
+
+    @property
+    def classes_(self):
+        return self.encoder.classes_
 
 
 class PipelineFactory:

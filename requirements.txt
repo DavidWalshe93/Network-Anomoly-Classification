@@ -1,3 +1,4 @@
+imblearn
 matplotlib
 scikit-learn
 numpy

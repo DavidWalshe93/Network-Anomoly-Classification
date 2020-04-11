@@ -9,9 +9,16 @@ def refactor_names(names, features):
         for j, name in enumerate(names):
             if name.find(f"x{i}") > -1:
                 name = name.replace(f"x{i}_", f"[{feature}] ")
-                name = name.replace("b'", "")
-                name = name.replace("'", "")
+                name = refactor_byte_name(name)
 
                 names[j] = name
 
     return names
+
+
+def refactor_byte_name(name):
+    name = str(name)
+    name = name.replace("b'", "")
+    name = name.replace("'", "")
+
+    return name
