@@ -4,11 +4,16 @@ Date:           03/04/2020
 """
 
 # Imports
-from sklearn.datasets import fetch_kddcup99
+import logging
+from json import load
 
 import numpy as np
 import pandas as pd
-from json import load
+from sklearn.datasets import fetch_kddcup99
+
+from src.logger_config import setup_logger
+
+logger = setup_logger(logging.getLogger(__name__))
 
 
 class LabelManager:
@@ -81,12 +86,17 @@ class DataRetriever:
     def _remove_duplicate_rows(self):
 
         dataset = pd.concat([self.X, self.y], axis=1, join="outer")
+        logger.info(f"Step  - Original dataset record count: {dataset.shape[0]}")
 
-        dataset1 = dataset.drop_duplicates(inplace=False)
+        dataset_reduced = dataset.drop_duplicates(inplace=False)
+        logger.info(f"Step  - Dataset record count with duplicates removed: {dataset_reduced.shape[0]}")
+        logger.info(
+            f"Step  - Dataset records reduced by {round(100 - ((dataset_reduced.shape[0] / dataset.shape[0]) * 100), 2)}%")
 
-        self._X = pd.DataFrame(data=dataset1.iloc[:, :-1].values, columns=self.label_manager.X_column_names)
+        self._X = pd.DataFrame(data=dataset_reduced.iloc[:, :-1].values, columns=self.label_manager.X_column_names)
 
-        self._y = pd.DataFrame(data=dataset1.iloc[:, -1].values.reshape(-1, 1), columns=self.label_manager.y_column_name)
+        self._y = pd.DataFrame(data=dataset_reduced.iloc[:, -1].values.reshape(-1, 1),
+                               columns=self.label_manager.y_column_name)
 
     def X_y_dataset(self, remove_duplicates=False, full_dataset=True) -> np.array:
         """
@@ -97,7 +107,7 @@ class DataRetriever:
         # Lazy init
         if self._X is None or self._y is None:
 
-            print(f"Only 10% of Dataset: {(not full_dataset)}")
+            logger.info(f"Step - Only 10% of Dataset: {(not full_dataset)}")
             data, target = fetch_kddcup99(return_X_y=True, percent10=(not full_dataset))
 
             target = np.array(target).reshape(-1, 1)

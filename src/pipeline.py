@@ -4,12 +4,19 @@ Date:           08/04/2020
 """
 
 from __future__ import annotations
+
+from collections import Counter
 from typing import TYPE_CHECKING
 
+from imblearn.over_sampling import RandomOverSampler, SMOTE
+from imblearn.pipeline import Pipeline as ImblearnPipeline
+from imblearn.under_sampling import NearMiss
 from sklearn.base import TransformerMixin
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline as SklearnPipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
+
+from src.config import RANDOM_STATE
 
 if TYPE_CHECKING:
     import numpy as np
@@ -70,7 +77,7 @@ class PipelineLabelEncoder(TransformerMixin):
         return self.encoder.classes_
 
 
-class PipelineFactory:
+class PreprocessPipelineFactory:
     """
     Method Factory Class to help with the creation of various pre-processing Pipelines.
     """
@@ -108,34 +115,65 @@ class PipelineFactory:
         )
 
     @property
-    def _category_step(self) -> Pipeline:
+    def _category_step(self) -> SklearnPipeline:
         """
         Property to get the category step for use in a Pipeline.
 
         :return: Pipeline with an OneHotEncoder internal step.
         """
-        return Pipeline([
+        return SklearnPipeline([
             ("ohe", OneHotEncoder())
         ])
 
     @property
-    def _scaler_step(self) -> Pipeline:
+    def _scaler_step(self) -> SklearnPipeline:
         """
         Property to get the scaler step for use in a Pipeline.
 
         :return: Pipeline with an StandardScaler internal step.
         """
-        return Pipeline([
+        return SklearnPipeline([
             ("ss", StandardScaler())
         ])
 
     @property
-    def _label_encoder_step(self) -> Pipeline:
+    def _label_encoder_step(self) -> SklearnPipeline:
         """
         Property to get the encoder step for use in a Pipeline.
 
         :return: Pipeline with a LabelEncoder internal step.
         """
-        return Pipeline([
+        return SklearnPipeline([
             ("le", PipelineLabelEncoder())
         ])
+
+
+class SamplingPipelineFactory:
+
+    def __init__(self, y, max_sample_limit=1000, k_neighbors=5):
+        self.k_neighbors = k_neighbors
+        self.nm_sampling_strategy = {key: max_sample_limit for key, value in Counter(y["signature"]).items() if
+                                     value > max_sample_limit}
+        self.ros_sampling_strategy = {key: k_neighbors for key, value in Counter(y["signature"]).items() if
+                                      value <= k_neighbors}
+
+    def sampling_pipeline(self) -> ImblearnPipeline:
+        return ImblearnPipeline(
+            steps=[
+                ("ros", self.random_over_sampling_step),
+                ("nm", self.near_miss_step),
+                ("smt", self.smote_pipeline_step)
+            ]
+        )
+
+    @property
+    def near_miss_step(self) -> NearMiss:
+        return NearMiss(sampling_strategy=self.nm_sampling_strategy, n_neighbors=self.k_neighbors, n_jobs=-1)
+
+    @property
+    def random_over_sampling_step(self) -> RandomOverSampler:
+        return RandomOverSampler(sampling_strategy=self.ros_sampling_strategy, random_state=RANDOM_STATE)
+
+    @property
+    def smote_pipeline_step(self) -> SMOTE:
+        return SMOTE(k_neighbors=self.k_neighbors - 1, random_state=RANDOM_STATE, n_jobs=-1)

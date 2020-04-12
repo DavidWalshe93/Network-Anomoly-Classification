@@ -3,11 +3,11 @@ Author:         David Walshe
 Date:           09/04/2020   
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from src.data import LabelManager
-from src.pipeline import PipelineFactory
+from src.pipeline import PreprocessPipelineFactory
 from src.utils import refactor_names, refactor_byte_name
 
 
@@ -16,7 +16,7 @@ class Preprocess:
     def __init__(self):
         self._signature_keys = None
 
-    def X_pre_process(self, X, pipeline_factory: PipelineFactory, **kwargs):
+    def X_pre_process(self, X, pipeline_factory: PreprocessPipelineFactory, **kwargs):
         X_preprocess_pipeline = pipeline_factory.X_preprocess_pipeline(**kwargs)
 
         _X = X_preprocess_pipeline.fit_transform(X)
@@ -31,17 +31,18 @@ class Preprocess:
 
         return X
 
-    def y_pre_process(self, y, pipeline_factory: PipelineFactory):
+    def y_pre_process(self, y, pipeline_factory: PreprocessPipelineFactory):
         y_preprocess_pipeline = pipeline_factory.y_preprocess_pipeline()
         y = y_preprocess_pipeline.fit_transform(y)
         y = self._convert_to_array(y)
+        y = y.ravel()
         y = pd.DataFrame(data=y, columns=["signature"])
         self._signature_keys = y_preprocess_pipeline.named_transformers_['lep'].named_steps["le"].classes_
 
         return y
 
     def X_y_pre_process(self, X, y, label_manager: LabelManager):
-        pipeline_factory = PipelineFactory()
+        pipeline_factory = PreprocessPipelineFactory()
 
         X = self.X_pre_process(X, pipeline_factory,
                                category_variables=label_manager.X_discrete,

@@ -2,42 +2,32 @@
 Author:     David Walshe
 Date:       03/04/2020
 """
+import logging
+import random
 from collections import Counter
+from itertools import zip_longest
 
-import numpy as np
-import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import datetime
-
+import numpy as np
+import pandas as pd
 # Pre-processing
-from imblearn.over_sampling import RandomOverSampler
-from imblearn.pipeline import Pipeline
-from imblearn.under_sampling import RandomUnderSampler
-from sklearn.base import TransformerMixin
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
-from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold
-from sklearn.svm import SVC
-from sklearn.metrics import confusion_matrix
 from sklearn.decomposition import PCA
-from sklearn.decomposition import KernelPCA
-
-from sklearn.model_selection import cross_val_score
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
 
 from src.data import DataRetriever, LabelManager
+from src.evaluate import ModelEvaluator
+from src.logger_config import setup_logger
+from src.pipeline import SamplingPipelineFactory
 from src.plot import plot_model_build_time
 from src.preprocess import Preprocess
 from src.timer import Timer
-from itertools import zip_longest
-import random
 
-mpl.rcParams['figure.dpi'] = 300
+mpl.rcParams['figure.dpi'] = 150
 
 RS_NUMBER = 0
 
-import random
+logger = setup_logger(logging.getLogger(__name__))
 
 
 def get_colors():
@@ -45,7 +35,7 @@ def get_colors():
     with open("colors.json") as fh:
         colors = json.load(fh)
 
-    return colors.values()
+    return list(colors.values())
 
 
 def plot_2d_space(X, y, label='Classes'):
@@ -73,172 +63,196 @@ def plot_value_counts(y, title="Count (target)"):
 
 
 def get_y_distribution(y):
-    distribution = pd.DataFrame(columns=["class", "count", "percentage"])
+    distribution = pd.DataFrame(columns=["label", "class", "count", "percentage"])
     counter = Counter(y["signature"])
     for index, (k, v) in enumerate(counter.items()):
         per = v / len(y) * 100
-        distribution.loc[index] = {"class": preprocess.y_classes.get(k, k), "count": v, "percentage": per}
+        distribution.loc[index] = {"label": k, "class": preprocess.y_classes.get(k, k), "count": v, "percentage": per}
 
     return distribution.sort_values("percentage", ascending=False)
 
 
+# def eval_model(model, X, y) -> np.ndarray:
+#     cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1)
+#     if type(y) is pd.DataFrame:
+#         y = y.to_numpy().ravel()
+#     scores = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=-1)
+#
+#     return scores
+#
+#
+#
+#
+#
+# def get_class_for_label(label):
+#     return preprocess.y_classes.get(label)
+#
+#
+# def get_all_classes_from_labels():
+#     return [preprocess.y_classes.get(idx) for idx, label in enumerate(preprocess.y_classes)]
+#
+#
+# def run_model_evaluation(X_train, y_train, X_test, y_test):
+#     logger.info("Stage - Model Analysis BEGIN")
+#     results = []
+#     models = create_model_collection(n_estimators=100)
+#     cms = []
+#     names = []
+#     for idx, (name, model) in enumerate(models.items()):
+#         names.append(name)
+#         logger.info(f"Step  - Fitting {name} model BEGIN")
+#         model.fit(X_train, y_train.to_numpy().ravel())
+#         models[name] = model
+#         logger.info(f"Step  - Fitting {name} model END {timer.time_stage(f'Fitting Model {name}')}")
+#
+#         logger.info(f"Step  - Evaluating {name} model BEGIN")
+#         scores = eval_model(model, X_test, y_test.to_numpy().ravel())
+#         results.append(scores)
+#         logger.info(f"Step  - Evaluating {name} model {timer.time_stage(f'{name} Evaluation')} END")
+#
+#         logger.info(f"Step  - Prediction BEGIN")
+#         y_pred = model.predict(X_test).reshape(-1, 1)
+#         logger.info(f"Step  - Prediction END {timer.time_stage(f'y Prediction {name}')}")
+#         timer.time_stage(f"y Prediction {name}")
+#
+#         logger.info(f"Step  - Confusion Matrix BEGIN")
+#         cms.append(confusion_matrix(y_test, y_pred))
+#         logger.info(f"Step  - Confusion Matrix END {timer.time_stage(f'Confusion Matrix {name}')}")
+#
+#     [logger.info(f"Step  - Results: {name} - mean={mean(scores):0.3f}, std={std(scores):0.3f}") for name, scores in zip(names, results)]
+#
+#     # plot the results
+#     plt.boxplot(results, labels=list(models.keys()), showmeans=True)
+#     plt.show()
+#
+#     for name, cm in zip(names, cms):
+#         div = np.sum(cm, axis=1)
+#         div_inv = div.reshape(-1, 1)
+#         cm_div = (cm / div_inv[None, :])
+#         cm_div = np.nan_to_num(cm_div, posinf=0.0, neginf=0.0)
+#         plt.subplots(figsize=(20, 10))
+#         ax: plt.Axes = sns.heatmap(cm_div[0], cmap="YlOrRd", linewidths=0.5, annot=True, xticklabels=get_all_classes_from_labels(), yticklabels=get_all_classes_from_labels(), fmt=".2f", cbar=False)
+#         ax.set_title(f"Confusion matrix ({name})")
+#         ax.set_xlabel("Predictions")
+#         ax.set_ylabel("Real Values")
+#         plt.show()
+#
+#     logger.info("Stage - Model Analysis END")
+
+
 if __name__ == '__main__':
+    logger.info("Start")
+
     # Setup
     # =====
     timer = Timer()
+    logger.info("Stage - Data Retrieval BEGIN")
     label_manager = LabelManager(config_file="data.json")
     data_retriever = DataRetriever(label_manager=label_manager)
 
     # Get Raw Data.
     # =============
+    logger.info("Stage -  BEGIN")
     X, y = data_retriever.X_y_dataset(remove_duplicates=True, full_dataset=False)
-    timer.time_stage("Data Retrieval")
+    logger.info(f"Stage - Data Retrieval END {timer.time_stage('Data Retrieval')}")
 
     # Preprocess raw data
     # ===================
+    logger.info("Stage - Preprocess BEGIN")
     preprocess = Preprocess()
     X, y = preprocess.X_y_pre_process(X, y, label_manager)
-    timer.time_stage("Preprocess step")
+    logger.info(f"Stage - Preprocess END {timer.time_stage('Preprocessing')}")
+
+    # Principle Component Analysis
+    # ============================
+    logger.info("Stage - PCA BEGIN")
+    X_backup = X
+
+    # PCA with 3 Components
+    # =====================
+    if True is False:
+        logger.info("Stage - PCA 3 Component BEGIN")
+        X = X_backup
+        pca = PCA(n_components=3)
+        X = pca.fit_transform(X)
+        explained_variance_3d = pca.explained_variance_ratio_.reshape(-1, 1)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.scatter(X[:, 0], X[:, 1], X[:, 2], c=y["signature"], marker='o', cmap=plt.cm.get_cmap('tab20', 23))
+
+        ax.set_title("PCA Analysis (3 Components)")
+        ax.set_xlabel('Component 1')
+        ax.set_ylabel('Component 2')
+        ax.set_zlabel('Component 3')
+
+        plt.show()
+
+        logger.info(f"Step  - PCA 3 Component END {timer.time_stage('PCA 3C')}")
+
+    # PCA with 2 Components
+    # =====================
+    logger.info("Stage - PCA 2 Component BEGIN")
+    X = X_backup
+    pca = PCA(n_components=2)
+    X = pca.fit_transform(X)
+    explained_variance_2d = pca.explained_variance_ratio_.reshape(-1, 1)
+
+    plt.scatter(X[:, 0], X[:, 1],
+                c=y["signature"], edgecolor='none', alpha=0.5,
+                cmap=plt.cm.get_cmap('tab20', 23))
+    plt.xlabel('Component 1')
+    plt.ylabel('Component 2')
+    plt.colorbar()
+    plt.show()
+    logger.info(f"Step  - PCA 2 Component END {timer.time_stage('PCA 2C')}")
+    logger.info("Stage - PCA END")
 
     # Test/Train Split
     # ================
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=.20, random_state=RS_NUMBER
     )
-
-    # Data Analysis
-    # =============
-    plot_value_counts(y_train)
-    y_dis_init = get_y_distribution(y_train)
-
-    # # PCA 2-D
-    # pca = PCA(n_components=10)
-    # X_train = pca.fit_transform(X_train)
-    #
-    # over = RandomOverSampler(sampling_strategy="minority")
-    #
-    # X_train, y_train = over.fit_sample(X_train, y_train)
-    #
-    # under = RandomUnderSampler(sampling_strategy="majority")
-    #
-    # X_train, y_train = under.fit_sample(X_train, y_train)
-    #
-    # model = DecisionTreeClassifier()
-    #
-    # model = model.fit(X_train, y_train)
-    #
-    # pipeline = Pipeline(steps=[("o", over), ("u", under), ("m", model)])
-    #
-    # cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
-    #
-    # scores = cross_val_score(pipeline, X_train, y_train, scoring="roc_auc", cv=cv, n_jobs=-1)
-    #
-    # print(f"Mean ROC AUC: {np.mean(scores)}")
-
-    #
-    # if type(y) is np.ndarray:
-    #     y_train = y_train.reshape(-1, 1).ravel()
-    # else:
-    #     y_train = y_train.to_numpy().reshape(-1, 1).ravel()
-    #
-    # if type(X_train) is not np.ndarray:
-    #     X_train = X_train.to_numpy()
-    #
-    # plot_2d_space(X_train, y_train, 'Imbalanced dataset (2 PCA components)')
-    #
-    # # Under-Sampling
-    # # =============
-    # from imblearn.under_sampling import RandomUnderSampler
-    #
-    # rus = RandomUnderSampler()
-    # X_rus, y_rus = rus.fit_sample(X_train, y_train)
-    #
-    # plot_2d_space(X_rus, y_rus, 'Random under-sampling')
-    # plot_value_counts(y_rus)
-    #
-    # # Over-Sampling
-    # # =============
-    # from imblearn.over_sampling import RandomOverSampler
-    #
-    # ros = RandomOverSampler()
-    # X_ros, y_ros = ros.fit_sample(X_train, y_train)
-    #
-    # plot_2d_space(X_ros, y_ros, 'Random Over-Sampling')
-    # plot_value_counts(y_ros)
-    #
-    # # TomekLinks
-    # # ==========
-    # from imblearn.under_sampling import TomekLinks, RepeatedEditedNearestNeighbours
-    # from collections import Counter
-    #
-    # # for arg in ("majority", "not majority", "not minority", "all", "auto"):
-    # arg = "all"
-    # X_u = X_train
-    # y_u = y_train
-    # print(f"Original y size: {Counter(y_u)}")
-    # for i in range(10):
-    #     renn = RepeatedEditedNearestNeighbours(n_jobs=-1)
-    #     X_u, y_u = renn.fit_resample(X_u, y_u)
-    #     # tl = TomekLinks(sampling_strategy=arg, n_jobs=-1)
-    #     # X_u, y_u, = tl.fit_sample(X_u, y_u)
-    #     if i % 10 == 0:
-    #         plot_value_counts(y_u, title=f"Count ({arg})")
-    #     # plot_2d_space(X_tl, y_tl, f'Tomek links under-sampling ({arg})')
-    #     # plot_value_counts(y_tl, title=f"Count ({arg})")
-    #     print(f"Run {i} y Counter: {Counter(y_u)}")
-    #     print(f"Run {i} y size: {y_u.size}")
-
-    # from sklearn.datasets import make_classification
-    #
-    # _X, _y = make_classification(
-    #     n_classes=2, class_sep=1.5, weights=[0.9, 0.1],
-    #     n_informative=3, n_redundant=1, flip_y=0,
-    #     n_features=20, n_clusters_per_class=1,
-    #     n_samples=100, random_state=10
-    # )
-    #
-    # pca = PCA(n_components=2)
-    # _X = pca.fit_transform(_X)
-    #
-    # plot_2d_space(_X, _y, 'Imbalanced dataset (2 PCA components)')
-    #
-    # from imblearn.under_sampling import ClusterCentroids
-    #
-    # cc = ClusterCentroids(sampling_strategy={key: 1 for key in (int(i) for i in np.unique(y))})
-    # X_cc, y_cc = cc.fit_sample(X_train, y_train)
-    #
-    # plot_2d_space(X_cc, y_cc, 'Cluster Centroids under-sampling')
-
-    # from imblearn.under_sampling import TomekLinks
-    #
-    # for arg in ("majority", "not majority", "not minority", "all", "auto"):
-    #     print("*" * 10)
-    #     print(arg)
-    #     tl = TomekLinks(sampling_strategy=arg)
-    #     X_tl, y_tl = tl.fit_sample(_X, _y)
-    #
-    #     print('Removed indexes:', tl.sample_indices_)
-    #
-    #     print(f"t1 size: {tl.sample_indices_.size}")
-    #     print(f"_y size: {_y.size}")
-    #     print(f"diff size: {_y.size - tl.sample_indices_.size}")
-    #
-    #     plot_2d_space(X_tl, y_tl, f'Tomek links under-sampling ({arg})')
-
-    # y_train_unique = y_train["signature"].unique()
-    # y_test_unique = y_test["signature"].unique()
-
     timer.time_stage("Train Test Split")
 
-    # # pca = PCA(n_components=None)
-    # pca = PCA(n_components=10)
-    #
-    # X_train = pca.fit_transform(X_train)
-    # X_test = pca.transform(X_test)
+    plot_value_counts(y_test, title="X_test Distribution")
 
+    # # Data Analysis - Base Line
+    # # =========================
+    # plot_value_counts(y)
+    # y_dis_init = get_y_distribution(y)
     #
-    # explained_variance = pca.explained_variance_ratio_.reshape(-1, 1)
+    # model = DummyClassifier(strategy="most_frequent")
     #
+    # scores = eval_model(model, X, y)
+    # print('Mean Accuracy: %.3f (%.3f)' % (mean(scores), std(scores)))
+    # timer.time_stage("Base Line Analysis")
+
+    # Sampling
+    # ========
+    logger.info("Stage - Sampling BEGIN")
+    sampling_pipeline = SamplingPipelineFactory(y_train, max_sample_limit=5000).sampling_pipeline()
+
+    X_train, y_train = sampling_pipeline.fit_resample(X_train, y_train)
+
+    y_sam_dist = get_y_distribution(y_train)
+
+    plt.scatter(X_train[:, 0], X_train[:, 1],
+                c=y_train["signature"], edgecolor='none', alpha=0.5,
+                cmap=plt.cm.get_cmap('tab20', 23))
+    plt.xlabel('Component 1')
+    plt.ylabel('Component 2')
+    plt.colorbar()
+    plt.show()
+    logger.info(f"Stage - Sampling END {timer.time_stage('Sampling')}")
+
+    # Testing Model Performance
+    # =========================
+    model_evaluator = ModelEvaluator(preprocess.y_classes)
+
+    model_evaluator.run_model_evaluation(X_train, y_train, X_test, y_test)
+
     # perc = explained_variance[0:10].sum()
     # timer.time_stage("PCA")
     #
@@ -261,5 +275,7 @@ if __name__ == '__main__':
     # timer.time_stage("Cross Validation")
 
     timer.time_script()
-    # stages, times = timer.plot_data
-    # plot_model_build_time(stages=stages, times=times)
+    stages, times = timer.plot_data
+    plot_model_build_time(stages=stages, times=times)
+
+    logger.info("Complete")
