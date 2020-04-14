@@ -151,29 +151,60 @@ class PreprocessPipelineFactory:
 class SamplingPipelineFactory:
 
     def __init__(self, y, max_sample_limit=1000, k_neighbors=5):
+        """
+        Class Constructor.
+        
+        :param y: The y dataset of output labels. 
+        :param max_sample_limit: The upper limit of samples.
+        :param k_neighbors: The number of neigbors to use in SMOTE and near miss.
+        """
         self.k_neighbors = k_neighbors
-        self.nm_sampling_strategy = {key: max_sample_limit for key, value in Counter(y["signature"]).items() if
-                                     value > max_sample_limit}
-        self.ros_sampling_strategy = {key: k_neighbors for key, value in Counter(y["signature"]).items() if
+        self.under_sampling_strategy = {key: max_sample_limit for key, value in Counter(y["signature"]).items() if
+                                        value > max_sample_limit}
+        self.ros_sampling_strategy = {key: k_neighbors * 20 for key, value in Counter(y["signature"]).items() if
                                       value <= k_neighbors}
 
     def sampling_pipeline(self) -> ImblearnPipeline:
+        """
+        Creates and returns a sampling Pipeline.
+        :return: A constructed sampling pipeline.
+        """
         return ImblearnPipeline(
             steps=[
                 ("ros", self.random_over_sampling_step),
                 ("nm", self.near_miss_step),
-                ("smt", self.smote_pipeline_step)
+                ("smt", self.smote_pipeline_step),
             ]
         )
 
     @property
-    def near_miss_step(self) -> NearMiss:
-        return NearMiss(sampling_strategy=self.nm_sampling_strategy, n_neighbors=self.k_neighbors, n_jobs=-1)
+    def random_over_sampling_step(self) -> RandomOverSampler:
+        """
+        Creates a RandomOverSammpling Step for a sampling pipeline.
+        
+        :return: A RandomOverSampler for use in a sampling pipeline. 
+        """
+        return RandomOverSampler(sampling_strategy=self.ros_sampling_strategy,
+                                 random_state=RANDOM_STATE)
 
     @property
-    def random_over_sampling_step(self) -> RandomOverSampler:
-        return RandomOverSampler(sampling_strategy=self.ros_sampling_strategy, random_state=RANDOM_STATE)
+    def near_miss_step(self) -> NearMiss:
+        """
+        Creates a NearMiss Version 1 Step for Undersampling the majority classes for a sampling pipeline.
+        
+        :return: A NearMiss1 object for usin a sampling pipeline.
+        """
+        return NearMiss(sampling_strategy=self.under_sampling_strategy,
+                        n_neighbors=self.k_neighbors,
+                        n_jobs=-1)
 
     @property
     def smote_pipeline_step(self) -> SMOTE:
-        return SMOTE(k_neighbors=self.k_neighbors - 1, random_state=RANDOM_STATE, n_jobs=-1)
+        """
+        Creates a SMOTE Step for sample synthesis of the minority classes for a sampling pipeline.
+
+        :return: A SMOTE object for usin a sampling pipeline.
+        """
+        return SMOTE(k_neighbors=self.k_neighbors,
+                     random_state=RANDOM_STATE,
+                     n_jobs=-1)

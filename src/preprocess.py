@@ -17,6 +17,14 @@ class Preprocess:
         self._signature_keys = None
 
     def X_pre_process(self, X, pipeline_factory: PreprocessPipelineFactory, **kwargs):
+        """
+        Perform pre-processing on X.
+
+        :param X: The set of input features.
+        :param pipeline_factory:  The pipeline factory to obtain the X pre-processing pipeline from.
+        :param kwargs: The kwargs for the pipeline to use.
+        :return: The processed dataset X.
+        """
         X_preprocess_pipeline = pipeline_factory.X_preprocess_pipeline(**kwargs)
 
         _X = X_preprocess_pipeline.fit_transform(X)
@@ -32,6 +40,14 @@ class Preprocess:
         return X
 
     def y_pre_process(self, y, pipeline_factory: PreprocessPipelineFactory):
+        """
+        Perform pre-processing on y.
+
+        :param X: The set of output labels.
+        :param pipeline_factory:  The pipeline factory to obtain the y pre-processing pipeline from.
+        :param kwargs: The kwargs for the pipeline to use.
+        :return: The processed dataset X.
+        """
         y_preprocess_pipeline = pipeline_factory.y_preprocess_pipeline()
         y = y_preprocess_pipeline.fit_transform(y)
         y = self._convert_to_array(y)
@@ -41,7 +57,14 @@ class Preprocess:
 
         return y
 
-    def X_y_pre_process(self, X, y, label_manager: LabelManager):
+    def X_y_pre_process(self, X, y, label_manager: LabelManager) -> tuple:
+        """
+        Helper method that manages the preprocessing of both X and y datasets and returns the post processed data.
+        :param X: The input dataset of features.
+        :param y: The output dataset of labels.
+        :param label_manager: The label manager object from main.
+        :return: (X, y) datasets after being processed.
+        """
         pipeline_factory = PreprocessPipelineFactory()
 
         X = self.X_pre_process(X, pipeline_factory,
@@ -53,6 +76,12 @@ class Preprocess:
 
     @staticmethod
     def _convert_to_array(dataset: pd.Series):
+        """
+        Attempts to convert a pandas Series object into a numpy array.
+
+        :param dataset: A Series object to transform
+        :return: The converted dataset.
+        """
         if type(dataset) is not np.ndarray:
             dataset = dataset.toarray()
 
@@ -60,4 +89,8 @@ class Preprocess:
 
     @property
     def y_classes(self):
+        """
+        The y class names.
+        :return:
+        """
         return {key: refactor_byte_name(value) for key, value in enumerate(self._signature_keys)}
