@@ -10,15 +10,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.model_selection import RepeatedStratifiedKFold, cross_val_score, GridSearchCV
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import LabelBinarizer
-from sklearn.svm import SVC
 
 from src.config import RANDOM_STATE
 from src.logger_config import setup_logger
+from src.plotting import compare_average_results_plots, compare_class_results
 from src.timer import Timer
 from src.utils import ravel_y
 
@@ -42,7 +43,7 @@ class ConfusionMatrix:
         """
         self._name = name
         self._class_names = class_names
-        self.matrix = confusion_matrix(y_test, y_pred)
+        self.matrix = confusion_matrix(y_test, y_pred, labels=[x for x in range(23)])
         self.scores = []
         self.calculate_results(class_names)
 
@@ -173,16 +174,28 @@ class ConfusionMatrix:
         """
         return pd.DataFrame(self.scores).fillna(0)
 
+    @property
+    def matrix_normalised(self) -> np.ndarray:
+        """
+        Creates a normalised version of the confusion matrix from 0 -> 1.
+
+        :return: A numpy array containing the normalised values of the confusion matrix.
+        """
+        division_matrix = np.sum(self.matrix, axis=1)
+        division_matrix_inverse = division_matrix.reshape(-1, 1)
+        confusion_matrix_normalised = (self.matrix / division_matrix_inverse[None, :])
+        confusion_matrix_normalised = np.nan_to_num(confusion_matrix_normalised, posinf=0.0, neginf=0.0)
+
+        return confusion_matrix_normalised
+
     def show(self):
         """
         Helper method to show the confusion matrix as a heatmap plot.
         """
-        div = np.sum(self.matrix, axis=1)
-        div_inv = div.reshape(-1, 1)
-        cm_div = (self.matrix / div_inv[None, :])
-        cm_div = np.nan_to_num(cm_div, posinf=0.0, neginf=0.0)
+        cm_norm = self.matrix_normalised
+
         plt.subplots(figsize=(20, 10))
-        ax: plt.Axes = sns.heatmap(cm_div[0], cmap="YlOrRd", linewidths=0.5, annot=True,
+        ax: plt.Axes = sns.heatmap(cm_norm[0], cmap="YlOrRd", linewidths=0.5, annot=True,
                                    xticklabels=self.class_names,
                                    yticklabels=self.class_names,
                                    fmt=".2f", cbar=False)
@@ -191,6 +204,24 @@ class ConfusionMatrix:
         ax.set_ylabel("Real Values")
         plt.show()
 
+    @property
+    def f_scores(self) -> dict:
+        df = self.data[["Class", "F-Score"]]
+
+        return dict(zip(df['Class'], df['F-Score']))
+
+    @property
+    def sensitivities(self) -> dict:
+        df = self.data[["Class", "Sensitivity"]]
+
+        return dict(zip(df['Class'], df['Sensitivity']))
+
+    @property
+    def precisions(self) -> dict:
+        df = self.data[["Class", "Precision"]]
+
+        return dict(zip(df['Class'], df['Precision']))
+
 
 class Model:
 
@@ -198,7 +229,7 @@ class Model:
         """
         Class constructor.
 
-        :param name: The textual name of this model (SVM/KNN).
+        :param name: The textual name of this model (RF/KNN).
         :param model: The model to use.
         :param class_names: The y labels corresponding class name.
         """
@@ -381,10 +412,11 @@ class ModelEvaluator:
         self.y_classes = y_classes
         self.y_test = None
 
-        self.svm_model = Model("SVM", SVC(kernel="rbf",
-                                          C=1000,
-                                          gamma=0.2,
-                                          random_state=RANDOM_STATE), y_classes)
+        self.rf_model = Model("RF", RandomForestClassifier(n_estimators=100,
+                                                           criterion="gini",
+                                                           max_features="auto",
+                                                           random_state=RANDOM_STATE,
+                                                           n_jobs=-1), y_classes)
         self.knn_model = Model("KNN", KNeighborsClassifier(n_neighbors=10,
                                                            p=1,
                                                            weights="distance",
@@ -396,13 +428,13 @@ class ModelEvaluator:
         """
         Evaluates the passed model with (X, y) datasets.
 
-        :param model: The model to validate (SVM/KNN).
+        :param model: The model to validate (RF/KNN).
         :param X: The input feature dataset.
         :param y: The output labels to predict.
         """
         logger.info(f"Step  - Evaluating {model.name} model BEGIN")
         cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=RANDOM_STATE)
-        cross_val_score(model.model, X, ravel_y(y), scoring='f1_macro', cv=cv, n_jobs=-1)
+        cross_val_score(model.model, X, ravel_y(y), scoring='f1_macro', cv=cv, verbose=10, n_jobs=-1)
         logger.info(f"Step  - Evaluating {model.name} model {timer.time_stage(f'{model.name} Evaluation')} END")
 
     def run_model_evaluation(self, X_train, y_train, X_test, y_test):
@@ -416,15 +448,15 @@ class ModelEvaluator:
         """
         self.y_test = y_test
         logger.info("Stage - Model Analysis BEGIN")
-        for classifier in (self.knn_model, self.svm_model):
-            classifier.model.fit(X_train, ravel_y(y_train))
+        for classifier in (self.knn_model, self.rf_model):
+            classifier.fit(X_train, y_train)
             self._eval_model(classifier, X=X_test, y=y_test)
             classifier.predict(X_test=X_test)
         logger.info("Stage - Model Analysis END")
 
     @property
-    def svm(self):
-        return self.svm_model
+    def rf(self):
+        return self.rf_model
 
     @property
     def knn(self):
@@ -434,29 +466,35 @@ class ModelEvaluator:
         """
         Helper method to show both models confusion matrices.
         """
-        self.svm.confusion_matrix(y_test=self.y_test).show()
+        self.rf.confusion_matrix(y_test=self.y_test).show()
         self.knn.confusion_matrix(y_test=self.y_test).show()
 
     def show_roc_curves(self):
         """
         Helper method to show both ROC curve collections for both models. Experimental.
         """
-        self.svm.plot_multi_class_roc_curve(y_test=self.y_test)
+        self.rf.plot_multi_class_roc_curve(y_test=self.y_test)
         self.knn.plot_multi_class_roc_curve(y_test=self.y_test)
 
     def roc_auc_scores(self):
         """
         Helper method to show ROC AUC metric. Experimental.
         """
-        self.svm.multi_class_roc_auc_score(y_test=self.y_test)
+        self.rf.multi_class_roc_auc_score(y_test=self.y_test)
         self.knn.multi_class_roc_auc_score(y_test=self.y_test)
 
     def save_results(self):
         """
         Saves the metric data for both models to a csv file for import to Excel.
         """
-        self.svm.matrix.data.to_csv("svm_results.csv", index=False)
-        self.knn.matrix.data.to_csv("knn_results.csv", index=False)
+        self.rf.matrix.data.to_csv("rf_results_averages.csv", index=False)
+        pd.DataFrame(self.rf.matrix.matrix).to_csv("rf_confusion_matrix.csv", index=False)
+        pd.DataFrame(self.rf.matrix.matrix_normalised[0, :, :]).to_csv("rf_confusion_matrix_normalised.csv",
+                                                                       index=False)
+        self.knn.matrix.data.to_csv("knn_results_averages.csv", index=False)
+        pd.DataFrame(self.rf.matrix.matrix).to_csv("knn_confusion_matrix.csv", index=False)
+        pd.DataFrame(self.rf.matrix.matrix_normalised[0, :, :]).to_csv("knn_confusion_matrix_normalised.csv",
+                                                                       index=False)
 
     def show_result_overview(self):
         """
@@ -466,10 +504,10 @@ class ModelEvaluator:
         """
         from pprint import pprint
         knn_result = {key: round(value, 2) for key, value in self._get_result_overview(self.knn).items()}
-        svm_result = {key: round(value, 2) for key, value in self._get_result_overview(self.svm).items()}
+        rf_result = {key: round(value, 2) for key, value in self._get_result_overview(self.rf).items()}
         results = {
             "KNN": knn_result,
-            "SVM": svm_result
+            "RF": rf_result
         }
 
         pprint(results)
@@ -481,11 +519,11 @@ class ModelEvaluator:
         """
         Returns a dict with the passed models result metric data.
 
-        :param model: The model to extract data from (SVM/KNN)
+        :param model: The model to extract data from (RF/KNN)
         :return: A dict with all the metric data contained.
         """
         return {
-            "Avg F-Score:": model.matrix.data["F-Score"].mean(),
+            "Avg F-Score": model.matrix.data["F-Score"].mean(),
             "Avg Accuracy(a)": model.matrix.data["Accuracy"].mean(),
             "Avg Precision(p)": model.matrix.data["Precision"].mean(),
             "Avg Sensitivity(r)": model.matrix.data["Sensitivity"].mean(),
@@ -495,6 +533,16 @@ class ModelEvaluator:
             "Avg FPR": model.matrix.data["FPR"].mean(),
             "Avg FNR": model.matrix.data["FNR"].mean(),
         }
+
+    def plot_results(self):
+        compare_class_results(self.rf.matrix.sensitivities, self.knn.matrix.sensitivities,
+                              "Random Forest Vs KNN Sensitivity Comparision")
+        compare_class_results(self.rf.matrix.precisions, self.knn.matrix.precisions,
+                              "Random Forest Vs KNN Precision Comparision")
+        compare_class_results(self.rf.matrix.f_scores, self.knn.matrix.f_scores,
+                              "Random Forest Vs KNN F-Score Comparision")
+
+        compare_average_results_plots(self.show_result_overview())
 
 
 class ModelTuner(ModelEvaluator):
@@ -508,7 +556,7 @@ class ModelTuner(ModelEvaluator):
 
         :param y_classes: The class names of the y numeric labels.
         :param tuning_params: The tuning parameters to use.
-        :param model_type: The model type (SVM/KNN)
+        :param model_type: The model type (RF/KNN)
         """
         super().__init__(y_classes=y_classes)
         self.tuning_params = tuning_params
@@ -537,7 +585,7 @@ class ModelTuner(ModelEvaluator):
     @property
     def classifier(self):
         return {
-            "SVM": self.svm_model.model,
+            "RF": self.rf_model.model,
             "KNN": self.knn_model.model,
         }.get(self.model_type.upper(), None)
 

@@ -12,6 +12,8 @@ import pandas as pd
 # Pre-processing
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
+# noinspection PyUnresolvedReferences
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 
 import src.plotting as myPlt
 from src.config import RANDOM_STATE, FULL_DATA_SET, TUNING
@@ -46,23 +48,32 @@ def print_optimiser_results(model_tuner: ModelTuner):
 if __name__ == '__main__':
     logger.info("Start")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Setup
-    # =====
+    # ==============================================================================================================
+    # ==============================================================================================================
     timer = Timer()
     logger.info("Stage - Data Retrieval BEGIN")
     label_manager = LabelManager(config_file="data.json")
     data_retriever = DataRetriever(label_manager=label_manager)
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Get Raw Data.
-    # =============
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - BEGIN")
     raw_X, raw_y = data_retriever.X_y_dataset(remove_duplicates=False, full_dataset=FULL_DATA_SET)
     logger.info(f"Stage - Data Retrieval END {timer.time_stage('Data Retrieval')}")
 
     myPlt.plot_value_counts(raw_y, title="y Distribution (Raw)")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Get Raw Data with duplicates removed
-    # ====================================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - BEGIN")
     X, y = data_retriever.X_y_dataset(remove_duplicates=True, full_dataset=FULL_DATA_SET, force=True)
     logger.info(f"Stage - Data Retrieval END {timer.time_stage('Data Retrieval')}")
@@ -74,20 +85,29 @@ if __name__ == '__main__':
     myPlt.plot_value_counts_compare(y1=raw_y, y2=y, level="Mid")
     myPlt.plot_value_counts_compare(y1=raw_y, y2=y, level="Min")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Preprocess raw data
-    # ===================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - Preprocess BEGIN")
     preprocess = Preprocess()
     X, y = preprocess.X_y_pre_process(X, y, label_manager)
     logger.info(f"Stage - Preprocess END {timer.time_stage('Preprocessing')}")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Principle Component Analysis
-    # ============================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - PCA BEGIN")
     X_backup = X
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # PCA with 3 Components
-    # =====================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - PCA 3 Component BEGIN")
     X = X_backup
     pca = PCA(n_components=3)
@@ -108,8 +128,11 @@ if __name__ == '__main__':
     plt.show()
     logger.info(f"Step  - PCA 3 Component END {timer.time_stage('PCA 3C')}")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # PCA with 2 Components
-    # =====================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - PCA 2 Component BEGIN")
     X = X_backup
     pca = PCA(n_components=2)
@@ -119,8 +142,11 @@ if __name__ == '__main__':
     myPlt.show_pca_plot(X, y, title="PCA Analysis (2 Components)")
     logger.info(f"Step  - PCA 2 Component END {timer.time_stage('PCA 2C')}")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # PCA N-Component Selection
-    # =========================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Step  - PCA Variance Graph BEGIN")
     X = X_backup
     pca = PCA().fit(X)
@@ -132,8 +158,11 @@ if __name__ == '__main__':
     plt.show()
     logger.info(f"Step  - PCA Variance Graph {timer.time_stage('PCA Graph')}")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # PCA with 20 Components
-    # =====================
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - PCA 2 Component BEGIN")
     X = X_backup
     pca = PCA(n_components=20)
@@ -142,15 +171,21 @@ if __name__ == '__main__':
 
     logger.info("Stage - PCA END")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Test/Train Split
-    # ================
+    # ==============================================================================================================
+    # ==============================================================================================================
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=.20, random_state=RANDOM_STATE
     )
     timer.time_stage("Train Test Split")
 
+    # ==============================================================================================================
+    # ==============================================================================================================
     # Sampling
-    # ========
+    # ==============================================================================================================
+    # ==============================================================================================================
     logger.info("Stage - Sampling BEGIN")
     if FULL_DATA_SET:
         max_sample_limit = 100_000
@@ -168,48 +203,66 @@ if __name__ == '__main__':
     logger.info(f"Stage - Sampling END {timer.time_stage('Sampling')}")
 
     if TUNING:
+        # ==============================================================================================================
+        # ==============================================================================================================
         # Hyper-parameter Tuning
-        # ======================
+        # ==============================================================================================================
+        # ==============================================================================================================
 
-        # SVM
+        # Random Forest.
         # ===
-        svm_params_kernel = [
+        rf_params_estimators = [
             {
-                "C": ["poly", "rbf", "sigmoid"],
+                "n_estimators": [100, 250, 500],
             }
         ]
-        model_tuner_kernel = ModelTuner(y_classes=preprocess.y_classes, tuning_params=svm_params_kernel,
-                                        model_type="SVM")
-        model_tuner_kernel.run_model_optimisation(X_train=X_train, y_train=y_train)
-        print_optimiser_results(model_tuner_kernel)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        model_tuner_estimator = ModelTuner(y_classes=preprocess.y_classes, tuning_params=rf_params_estimators,
+                                           model_type="RF")
+        model_tuner_estimator.run_model_optimisation(X_train=X_train, y_train=y_train)
+        print_optimiser_results(model_tuner_estimator)
+        # --------------------------------------------------------------------------------------------------------------
 
-        svm_params_C = [
+        rf_params_criterion = [
             {
-                "C": [1, 10, 100, 1000],
-                "kernel": [model_tuner_kernel.best_parameters["kernel"]]
+                "criterion": ["gini", "entropy"],
+                "n_estimators": [model_tuner_estimator.best_parameters["n_estimators"]]
             }
         ]
-        model_tuner_C = ModelTuner(y_classes=preprocess.y_classes, tuning_params=svm_params_C, model_type="SVM")
-        model_tuner_C.run_model_optimisation(X_train=X_train, y_train=y_train)
-        print_optimiser_results(model_tuner_C)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        model_tuner_criterion = ModelTuner(y_classes=preprocess.y_classes, tuning_params=rf_params_criterion,
+                                           model_type="RF")
+        model_tuner_criterion.run_model_optimisation(X_train=X_train, y_train=y_train)
+        print_optimiser_results(model_tuner_criterion)
+        # --------------------------------------------------------------------------------------------------------------
 
-        svm_params_gamma = [
+        rf_params_max_features = [
             {
-                "gamma": [0.2, 0.4, 0.6, 0.8],
-                "C": [model_tuner_C.best_parameters["C"]],
-                "kernel": [model_tuner_C.best_parameters["kernel"]]
+                "max_features": ["auto", "sqrt", "log2", None],
+                "criterion": [model_tuner_criterion.best_parameters["criterion"]],
+                "n_estimators": [model_tuner_criterion.best_parameters["n_estimators"]]
             }
         ]
 
-        model_tuner_gamma = ModelTuner(y_classes=preprocess.y_classes, tuning_params=svm_params_gamma, model_type="SVM")
-        model_tuner_gamma.run_model_optimisation(X_train=X_train, y_train=y_train)
-        print_optimiser_results(model_tuner_gamma)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        model_tuner_max_features = ModelTuner(y_classes=preprocess.y_classes, tuning_params=rf_params_max_features,
+                                              model_type="RF")
+        model_tuner_max_features.run_model_optimisation(X_train=X_train, y_train=y_train)
+        print_optimiser_results(model_tuner_max_features)
+
+        # --------------------------------------------------------------------------------------------------------------
+
+        rf_params_oob = [
+            {
+                "oob_score": [True, False],
+                "max_features": [model_tuner_max_features.best_parameters["max_features"]],
+                "criterion": [model_tuner_max_features.best_parameters["criterion"]],
+                "n_estimators": [model_tuner_max_features.best_parameters["n_estimators"]]
+            }
+        ]
+
+        model_tuner_oob = ModelTuner(y_classes=preprocess.y_classes, tuning_params=rf_params_oob,
+                                     model_type="RF")
+        model_tuner_oob.run_model_optimisation(X_train=X_train, y_train=y_train)
+        print_optimiser_results(model_tuner_oob)
+        # --------------------------------------------------------------------------------------------------------------
 
         # KNN
         # ===
@@ -222,8 +275,7 @@ if __name__ == '__main__':
                                           model_type="KNN")
         model_tuner_neighors.run_model_optimisation(X_train=X_train, y_train=y_train)
         print_optimiser_results(model_tuner_neighors)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        # --------------------------------------------------------------------------------------------------------------
 
         knn_params_p = [
             {
@@ -234,8 +286,7 @@ if __name__ == '__main__':
         model_tuner_p = ModelTuner(y_classes=preprocess.y_classes, tuning_params=knn_params_p, model_type="KNN")
         model_tuner_p.run_model_optimisation(X_train=X_train, y_train=y_train)
         print_optimiser_results(model_tuner_p)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        # --------------------------------------------------------------------------------------------------------------
 
         knn_params_weights = [
             {
@@ -248,8 +299,7 @@ if __name__ == '__main__':
                                          model_type="KNN")
         model_tuner_weights.run_model_optimisation(X_train=X_train, y_train=y_train)
         print_optimiser_results(model_tuner_weights)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        # --------------------------------------------------------------------------------------------------------------
 
         knn_params_algorithm = [
             {
@@ -264,16 +314,19 @@ if __name__ == '__main__':
                                            model_type="KNN")
         model_tuner_algorithm.run_model_optimisation(X_train=X_train, y_train=y_train)
         print_optimiser_results(model_tuner_algorithm)
-        # ==============================================================================================================
-        # ==============================================================================================================
+        # --------------------------------------------------------------------------------------------------------------
 
     else:
+        # ==============================================================================================================
+        # ==============================================================================================================
         # Testing Model Performance
-        # =========================
+        # ==============================================================================================================
+        # ==============================================================================================================
         model_evaluator = ModelEvaluator(y_classes=preprocess.y_classes)
 
         model_evaluator.run_model_evaluation(X_train, y_train, X_test, y_test)
         model_evaluator.show_confusion_matrices()
+        model_evaluator.plot_results()
         model_evaluator.save_results()
 
     timer.time_script()

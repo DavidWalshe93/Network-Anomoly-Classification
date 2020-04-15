@@ -141,3 +141,57 @@ def plot_value_counts_compare(y1, y2, level="All", title="Raw Vs Reduced Dataset
 
     plt.xticks(rotation=90)
     plt.show()
+
+
+def compare_average_results_plots(result_metrics: dict):
+    rf_results = result_metrics["RF"]
+    knn_results = result_metrics["KNN"]
+
+    percentage_result_keys = ['Avg Accuracy(a)', 'Avg Precision(p)', 'Avg Sensitivity(r)', 'Avg Specificity']
+    x = np.arange(len(percentage_result_keys))  # the label locations
+
+    rf_per_data = [rf_results[label] for label in percentage_result_keys]
+    knn_per_data = [knn_results[label] for label in percentage_result_keys]
+
+    results_plotter(rf_per_data, knn_per_data, keys=percentage_result_keys, x=x)
+
+    float_result_keys = ['Avg F-Score', 'Avg TPR', 'Avg TNR', 'Avg FPR', 'Avg FNR']
+    x = np.arange(len(float_result_keys))  # the label locations
+
+    rf_float_data = [rf_results[label] for label in float_result_keys]
+    knn_float_data = [knn_results[label] for label in float_result_keys]
+
+    results_plotter(rf_float_data, knn_float_data, keys=float_result_keys, x=x, scale="0-1")
+
+
+def compare_class_results(rf_result_metric: dict, knn_result_metric, title="No Title"):
+    classes = list(rf_result_metric.keys())
+
+    x = np.arange(len(classes))  # the label locations
+
+    rf_per_data = [rf_result_metric[label] for label in classes]
+    knn_per_data = [knn_result_metric[label] for label in classes]
+
+    results_plotter(rf_per_data, knn_per_data, keys=classes, x=x, title=title, rotate=True)
+
+
+def results_plotter(rf_data, knn_data, keys, x, scale="%",
+                    title="Average Metric Comparison Between KNN and Random Forests", rotate=False):
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots()
+    ax.bar(x - width / 2, rf_data, width, label="KNN")
+    ax.bar(x + width / 2, knn_data, width, label="RF")
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel(f'Output Value ({scale})')
+    ax.set_xlabel('Metrics')
+    ax.set_title(title)
+    ax.set_xticks(x)
+    ax.set_xticklabels(keys)
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+    fig.tight_layout()
+    if rotate:
+        plt.xticks(rotation=90)
+    plt.show()
